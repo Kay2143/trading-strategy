@@ -6,6 +6,11 @@ on:
     # 22:30 UTC = 07:30 KST, 일~목요일(UTC) = 월~금요일(KST)
     - cron: '30 22 * * 0,1,2,3,4'
   workflow_dispatch:
+    inputs:
+      force:
+        description: '오늘 이미 실행됐어도 강제로 재실행'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -22,7 +27,7 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - run: python swing_screener.py
+      - run: python swing_screener.py ${{ github.event.inputs.force == 'true' && '--force' || '' }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
