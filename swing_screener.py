@@ -16,11 +16,16 @@ import time
 
 from datetime import date
 
+import pandas as pd
+
 from market_data import get_universe, fetch_all
 from swing_indicators import compute_indicators, classify_signal
+from trend_template import compute_trend_template_fields, check_trend_template
 from news_headlines import fetch_headlines
 from telegram_alert import send_telegram_message
 from picks_log import log_picks, already_logged
+
+TREND_TEMPLATE_MIN_CONDITIONS = 8  # 8개 중 8개 (검증됨: 4개 시대 중 3개에서 기준선 대비 약 2배 수익률)
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
@@ -36,7 +41,18 @@ def screen(top_n: int, start: str, max_alerts: int) -> dict:
     print(f"{len(data)}개 종목 수집 완료 ({time.time()-t0:.1f}초)")
 
     name_map = dict(zip(universe["Code"], universe["Name"]))
-    candidates = {"돌파": [], "반등": []}
+    candidates = {"돌파": [], "반등": [], "추세템플릿": []}
+
+    # RS(상대강도) 백분위 계산을 위해 전체 종목의 252일 수익률을 먼저 계산 (유니버스 내 상대 순위)
+    trend_fields = {}
+    returns_252d = {}
+    for code, df in data.items():
+        if len(df) < 60:
+            continue
+        trend_fields[code] = compute_trend_template_fields(df)
+        returns_252d[code] = trend_fields[code]["Return_252d"].iloc[-1]
+
+    rs_percentiles = (pd.Series(returns_252d).rank(pct=True) * 100).to_dict()
 
     for code, df in data.items():
         if len(df) < 60:
@@ -44,17 +60,30 @@ def screen(top_n: int, start: str, max_alerts: int) -> dict:
         ind = compute_indicators(df)
         latest = ind.iloc[-1]
         signal = classify_signal(latest)
-        if signal is None:
-            continue
-        candidates[signal].append({
-            "code": code, "name": name_map.get(code, code),
-            "price": latest["Close"], "change_1d": latest["Change_1d"],
-            "rsi": latest["RSI"], "bb_percent": latest["BB_percent"],
-            "vol_ratio": latest["Volume_ratio"], "pct_from_high": latest["Pct_from_52w_high"],
-        })
+        if signal is not None:
+            candidates[signal].append({
+                "code": code, "name": name_map.get(code, code),
+                "price": latest["Close"], "change_1d": latest["Change_1d"],
+                "rsi": latest["RSI"], "bb_percent": latest["BB_percent"],
+                "vol_ratio": latest["Volume_ratio"], "pct_from_high": latest["Pct_from_52w_high"],
+            })
+
+        tt_row = trend_fields[code].iloc[-1]
+        if pd.notna(tt_row.get("MA200")):
+            checks = check_trend_template(tt_row)
+            rs = rs_percentiles.get(code, float("nan"))
+            checks["RS백분위>=70"] = bool(pd.notna(rs) and rs >= 70)
+            n_passed = sum(checks.values())
+            if n_passed >= TREND_TEMPLATE_MIN_CONDITIONS:
+                candidates["추세템플릿"].append({
+                    "code": code, "name": name_map.get(code, code),
+                    "price": tt_row["Close"], "change_1d": (tt_row["Close"] / df["Close"].iloc[-2] - 1) * 100,
+                    "rs_percentile": rs, "n_passed": n_passed,
+                })
 
     candidates["돌파"] = sorted(candidates["돌파"], key=lambda x: x["vol_ratio"], reverse=True)[:max_alerts]
     candidates["반등"] = sorted(candidates["반등"], key=lambda x: x["rsi"])[:max_alerts]
+    candidates["추세템플릿"] = sorted(candidates["추세템플릿"], key=lambda x: x["rs_percentile"], reverse=True)[:max_alerts]
     return candidates
 
 
@@ -62,9 +91,23 @@ def format_message(candidates: dict, with_news: bool) -> str:
     from datetime import datetime
     lines = [f"<b>스윙 스크리닝 결과 {datetime.now().strftime('%Y-%m-%d')}</b>\n"]
 
-    if not candidates["돌파"] and not candidates["반등"]:
+    if not candidates["돌파"] and not candidates["반등"] and not candidates["추세템플릿"]:
         lines.append("오늘은 조건에 맞는 후보가 없습니다.")
         return "\n".join(lines)
+
+    if candidates["추세템플릿"]:
+        lines.append("<b>[추세템플릿 후보]</b> Minervini Trend Template 8개 조건 전부 충족 "
+                      "(검증됨: 10일후 평균 +1.5% vs 기준선 +0.8%, 4개 시대 중 3개에서 우위. "
+                      "RS는 자체 유니버스 내 상대 백분위로 근사 계산한 값)")
+        for c in candidates["추세템플릿"]:
+            lines.append(
+                f"• {c['name']}({c['code']}) {c['price']:,.0f}원 "
+                f"({c['change_1d']:+.1f}%) RS백분위 {c['rs_percentile']:.0f}"
+            )
+            if with_news:
+                for h in fetch_headlines(c["name"], n=2):
+                    lines.append(f"   [{h['sentiment']}] {h['title']}")
+        lines.append("")
 
     if candidates["돌파"]:
         lines.append("<b>[상승 돌파 후보]</b> 신고가 근접 + 거래량 급증 (검증됨: 10일후 평균 +2.5%, 4개 시대 전부 기준선 상회)")
