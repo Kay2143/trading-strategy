@@ -73,3 +73,16 @@ def fetch_all(codes: list[str], start: str = "2024-01-01", max_workers: int = 15
                 results[code] = df
 
     return results
+
+
+def get_market_regime(start: str = "2024-01-01") -> dict | None:
+    """코스피 지수가 200일선 위인지(상승장)/아래인지(약세장). 조회 실패 시 None."""
+    try:
+        df = _trim_incomplete_today(fdr.DataReader("KS11", start, None))
+    except Exception:
+        return None
+    if len(df) < 200:
+        return None
+    close = df["Close"].iloc[-1]
+    ma200 = df["Close"].rolling(200).mean().iloc[-1]
+    return {"close": close, "ma200": ma200, "strong": bool(close > ma200)}

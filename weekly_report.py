@@ -61,7 +61,7 @@ def format_report(evaluated: pd.DataFrame) -> str:
         lines.append("이번 주에 5거래일이 경과해 평가 가능한 픽이 없습니다.")
         return "\n".join(lines)
 
-    for category in ["돌파", "반등"]:
+    for category in ["돌파", "추세템플릿", "반등"]:
         sub = evaluated[evaluated["category"] == category]
         if sub.empty:
             continue

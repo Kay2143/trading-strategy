@@ -24,3 +24,7 @@ TELEGRAM_BOT_TOKEN = _get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = _get("TELEGRAM_CHAT_ID")
 NAVER_CLIENT_ID = _get("NAVER_CLIENT_ID")
 NAVER_CLIENT_SECRET = _get("NAVER_CLIENT_SECRET")
+
+# 매매 계획(수량 계산)용. ACCOUNT_SIZE가 0이면 수량은 표시하지 않고 손절/목표가만 표시.
+ACCOUNT_SIZE = float(_get("ACCOUNT_SIZE", "0") or 0)  # 투자 계좌 금액(원)
+RISK_PCT = float(_get("RISK_PCT", "1.0") or 1.0)  # 한 종목 손절 시 계좌 대비 최대 손실(%)

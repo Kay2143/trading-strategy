@@ -4,6 +4,7 @@
 """
 
 import os
+from datetime import timedelta
 import pandas as pd
 
 LOG_PATH = os.path.join(os.path.dirname(__file__), "picks_log.csv")
@@ -47,3 +48,13 @@ def log_picks(candidates: dict, pick_date) -> int:
     combined = pd.concat([log, new_df], ignore_index=True)
     save_log(combined)
     return len(rows)
+
+
+def recently_alerted(pick_date, lookback_days: int = 7) -> set[str]:
+    """pick_date 이전 lookback_days일(달력 기준) 안에 이미 알림이 나간 종목 코드."""
+    log = load_log()
+    if log.empty:
+        return set()
+    since = pick_date - timedelta(days=lookback_days)
+    recent = log[(log["pick_date"] < pick_date) & (log["pick_date"] >= since)]
+    return set(recent["code"])
