@@ -23,7 +23,7 @@ def send_telegram_message(text: str) -> bool:
             "text": chunk,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
-        })
+        }, timeout=20)
         if resp.status_code != 200:
             print(f"텔레그램 전송 실패: {resp.status_code} {resp.text}")
             ok = False

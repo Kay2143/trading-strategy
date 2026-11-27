@@ -1,22 +1,26 @@
 # Re-registered after initial-push indexing issue
-name: Daily Swing Screener
+name: Daily Stock Research Agent
 
 on:
   schedule:
-    # 22:30 UTC = 07:30 KST, 일~목요일(UTC) = 월~금요일(KST)
-    - cron: '30 22 * * 0,1,2,3,4'
+    # 23:00 UTC = 08:00 KST, 일~목요일(UTC) = 월~금요일(KST)
+    - cron: '0 23 * * 0,1,2,3,4'
   workflow_dispatch:
     inputs:
       force:
-        description: '오늘 이미 실행됐어도 강제로 재실행'
+        description: '오늘 이미 실행됐어도 재분석하고 다시 전송'
         type: boolean
         default: false
 
 permissions:
   contents: write
 
+concurrency:
+  group: stock-research-agent
+  cancel-in-progress: false
+
 jobs:
-  screen:
+  research:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,17 +31,15 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - run: python swing_screener.py ${{ github.event.inputs.force == 'true' && '--force' || '' }}
+      - run: python research_agent.py ${{ github.event.inputs.force == 'true' && '--force' || '' }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
-          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
 
-      - name: Commit updated picks log
+      - name: Commit research reports and outcome ledger
         run: |
-          git config user.name "swing-screener-bot"
+          git config user.name "stock-research-agent"
           git config user.email "actions@github.com"
-          git add picks_log.csv
-          git diff --cached --quiet || git commit -m "Update picks log $(date -u +%F)"
+          git add "agents/주식천재stock-research-agent/reports" "agents/주식천재stock-research-agent/decisions/candidate_ledger.csv"
+          git diff --cached --quiet || git commit -m "Add daily stock research $(date -u +%F)"
           git push

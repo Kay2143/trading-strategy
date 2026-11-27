@@ -1,9 +1,9 @@
 # Re-registered after initial-push indexing issue
-name: Weekly Swing Report
+name: Weekly Research Retrospective
 
 on:
   schedule:
-    # 07:00 UTC 금요일 = 16:00 KST 금요일
+    # 07:00 UTC Friday = 16:00 KST Friday
     - cron: '0 7 * * 5'
   workflow_dispatch:
 
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  report:
+  retrospective:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,15 +22,15 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - run: python weekly_report.py
+      - run: python research_agent.py --weekly-report
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-      - name: Commit updated picks log
+      - name: Commit weekly research report
         run: |
-          git config user.name "swing-screener-bot"
+          git config user.name "stock-research-agent"
           git config user.email "actions@github.com"
-          git add picks_log.csv
-          git diff --cached --quiet || git commit -m "Mark picks reported $(date -u +%F)"
+          git add "agents/주식천재stock-research-agent/reports/weekly"
+          git diff --cached --quiet || git commit -m "Add weekly research report $(date -u +%F)"
           git push
